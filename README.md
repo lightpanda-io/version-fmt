@@ -26,6 +26,28 @@ The result is keyed by release tag. Each entry holds the `version`, the build
 `date` (taken from the asset `created_at`) and one object per platform
 (`download_url`, `shasum`, `size`).
 
+### Previous nightly versions
+
+The `nightly` entry also holds a `last` list. It keeps the 5 previous version
+strings, newest first. On each run the replaced version moves to the head of
+the list and the oldest one leaks out.
+
+```json
+{
+  "nightly": {
+    "version": "1.0.0-nightly.9290+fffffffff",
+    "date": "2026-09-09",
+    "last": [
+      "1.0.0-nightly.9289+6efc35cfe",
+      "1.0.0-nightly.9288+aaaaaaaaa"
+    ]
+  }
+}
+```
+
+A version never appears twice in the list. Other release tags have no `last`
+list.
+
 ## Docker
 
 Each version of version-fmt is bundled in a docker image available on GH registry.
