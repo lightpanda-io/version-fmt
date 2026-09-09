@@ -34,6 +34,11 @@ const (
 	exitFail = 1
 
 	repository = "lightpanda-io/browser"
+
+	// nightly is the release tag using a leaky bucket of previous versions.
+	nightly = "nightly"
+	// keepLast is the number of previous nightly versions kept in the index.
+	keepLast = 5
 )
 
 // main starts interruptable context and runs the program.
@@ -132,6 +137,17 @@ func run(_ context.Context, args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("read index: %w", err)
 	}
 
+	// The nightly entry keeps the previous versions in a leaky bucket.
+	if *release == nightly {
+		last, err := lastVersions(index[nightly], *version)
+		if err != nil {
+			return fmt.Errorf("last versions: %w", err)
+		}
+		if len(last) > 0 {
+			out["last"] = last
+		}
+	}
+
 	raw, err := json.Marshal(out)
 	if err != nil {
 		return fmt.Errorf("marshal entry: %w", err)
@@ -185,6 +201,37 @@ func fetchRelease(repo, release string) (*Release, error) {
 	}
 
 	return &rel, nil
+}
+
+// lastVersions builds the leaky bucket of previous versions.
+// prev is the current entry of the index, before the update.
+// Its version moves to the head of the list and the oldest ones leak out.
+// The list holds keepLast versions at most and no duplicate.
+func lastVersions(prev json.RawMessage, version string) ([]string, error) {
+	var entry struct {
+		Version string   `json:"version"`
+		Last    []string `json:"last"`
+	}
+	if len(prev) > 0 {
+		if err := json.Unmarshal(prev, &entry); err != nil {
+			return nil, fmt.Errorf("decode previous entry: %w", err)
+		}
+	}
+
+	last := make([]string, 0, keepLast)
+	seen := map[string]bool{"": true, version: true}
+	for _, v := range append([]string{entry.Version}, entry.Last...) {
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		last = append(last, v)
+		if len(last) == keepLast {
+			break
+		}
+	}
+
+	return last, nil
 }
 
 func readIndex(path string) (map[string]json.RawMessage, error) {
